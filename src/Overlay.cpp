@@ -1,14 +1,16 @@
-#include "Overlay.h"
 #include <dwmapi.h>
 #include <iostream>
+#include <algorithm>
+#include "Overlay.h"
+#include "util.cpp"
 
 // Static member initialization
 const std::vector<std::string> Overlay::KEYBOARD_ROWS = {
     "QWERTYUIOP",
     "ASDFGHJKL;",
-    "ZXCVBNM,."};
+    "ZXCVBNM,./"};
 
-const int Overlay::SQUARE_SIZE = 25;
+int Overlay::SQUARE_SIZE = 0;
 const int Overlay::FONT_SIZE = 13;
 const UINT Overlay::TOGGLE_KEY = VK_OEM_3; // Backquote
 const UINT Overlay::TOGGLE_MODIFIER = MOD_ALT;
@@ -26,6 +28,8 @@ HHOOK Overlay::keyboardHook = NULL;
 UINT_PTR Overlay::clickTimer = 0;
 POINT Overlay::pendingClickPos = {0, 0};
 int Overlay::clickCount = 0;
+u_int Overlay::SCREEN_WIDTH = 0;
+u_int Overlay::SCREEN_HEIGHT = 0;
 
 bool Overlay::Initialize()
 {
@@ -51,15 +55,35 @@ bool Overlay::Initialize()
     }
 
     // Create transparent window
-    int screenWidth = GetSystemMetrics(SM_CXSCREEN);
-    int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+    SCREEN_WIDTH = GetSystemMetrics(SM_CXSCREEN);
+    if (SCREEN_WIDTH <= 0)
+	{
+		std::cout << "Could not get the screen width\b" << std::endl;
+		return 1;
+	}
+    SCREEN_HEIGHT = GetSystemMetrics(SM_CYSCREEN);
+    if (SCREEN_HEIGHT <= 0)
+	{
+		std::cout << "Could not get the screen height\b" << std::endl;
+		return 1;
+	}
+
+    std::vector<int> divisors_x = find_divisors(SCREEN_WIDTH);
+    std::vector<int> divisors_y = find_divisors(SCREEN_HEIGHT);
+    if (divisors_x.empty() || divisors_y.empty())
+    {
+        return 1;
+    }
+    std::vector<int> common_divs = common_divisors(divisors_x, divisors_y);
+    sort(common_divs.begin(), common_divs.end());
+    SQUARE_SIZE =  common_divs.back();
 
     hwnd = CreateWindowExW(
         WS_EX_TOPMOST | WS_EX_LAYERED,
         L"MouselessOverlay",
         L"Mouseless",
         WS_POPUP,
-        0, 0, screenWidth, screenHeight,
+        0, 0, SCREEN_WIDTH, SCREEN_HEIGHT,
         NULL, NULL, GetModuleHandle(NULL), NULL);
 
     if (!hwnd)
@@ -200,13 +224,8 @@ LRESULT CALLBACK Overlay::KeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
 }
 void Overlay::Draw(HDC hdc)
 {
-    int screenWidth = GetSystemMetrics(SM_CXSCREEN);
-    int screenHeight = GetSystemMetrics(SM_CYSCREEN);
-
-    int cols = screenWidth / (SQUARE_SIZE * 3);
-    int rows = screenHeight / (SQUARE_SIZE * 3);
-    cols = cols % 2 == 0 ? cols : cols + 1;
-    rows = rows % 2 == 0 ? rows : rows + 1;
+    int cols = SCREEN_WIDTH / (SQUARE_SIZE);
+    int rows = SCREEN_HEIGHT / (SQUARE_SIZE);
     for (int row = 0; row < rows; row++)
     {
         for (int col = 0; col < cols; col += 2)
@@ -214,12 +233,13 @@ void Overlay::Draw(HDC hdc)
             char pairKey1 = (char)('A' + (col / 2) % 26);
             char pairKey2 = (char)('A' + row % 26);
 
-            int x = col * SQUARE_SIZE * 3;
-            int y = row * SQUARE_SIZE * 3;
+            // current iteration coordinates
+            int x = col * SQUARE_SIZE;
+            int y = row * SQUARE_SIZE;
 
             // Draw rectangle background
             HBRUSH hBrush = CreateSolidBrush(RGB(0, 0, 0));
-            RECT rect = {x, y, x + SQUARE_SIZE * 6, y + SQUARE_SIZE * 3};
+            RECT rect = {x, y, x + ((SQUARE_SIZE) * 2), y + SQUARE_SIZE};
             FillRect(hdc, &rect, hBrush);
             DeleteObject(hBrush);
 
@@ -229,21 +249,19 @@ void Overlay::Draw(HDC hdc)
 
             // Select a null brush so Rectangle won't fill it again
             HBRUSH oldBrush = (HBRUSH)SelectObject(hdc, GetStockObject(NULL_BRUSH));
-            Rectangle(hdc, x, y, x + SQUARE_SIZE * 6, y + SQUARE_SIZE * 3);
+            Rectangle(hdc, x, y, x + ((SQUARE_SIZE) * 2), y + SQUARE_SIZE); // create border/outline
             SelectObject(hdc, oldBrush);
             SelectObject(hdc, oldPen);
             DeleteObject(hPen);
             // Draw character grids
             DrawCharacterGrid(hdc, pairKey1, x, y);
-            DrawCharacterGrid(hdc, pairKey2, x + SQUARE_SIZE * 3, y);
+            DrawCharacterGrid(hdc, pairKey2, x + SQUARE_SIZE, y);
 
             // Store pair position
             std::string pair;
             pair += pairKey1;
             pair += pairKey2;
-            pairPositions[pair] = std::make_pair(
-                x + (SQUARE_SIZE * 3),
-                y + (SQUARE_SIZE * 1.5));
+            pairPositions[pair] = std::make_pair(x, y);
         }
     }
 
@@ -254,12 +272,10 @@ void Overlay::Draw(HDC hdc)
     }
 }
 
-void Overlay::DrawKeyboardLayout(HDC hdc, int centerX, int centerY)
+void Overlay::DrawKeyboardLayout(HDC hdc, int startX, int startY)
 {
-    int rectWidth = SQUARE_SIZE * 6;
-    int rectHeight = SQUARE_SIZE * 3;
-    int startX = centerX - (rectWidth / 2);
-    int startY = centerY - (rectHeight / 2);
+    int rectWidth = ((SQUARE_SIZE) * 2);
+    int rectHeight = SQUARE_SIZE;
     keyboardPositions.clear();
 
     int maxKeysInRow = KEYBOARD_ROWS[0].length();
@@ -279,20 +295,35 @@ void Overlay::DrawKeyboardLayout(HDC hdc, int centerX, int centerY)
             int x = startX + rowOffset + (col * keyWidth);
             int y = startY + (row * keyHeight);
 
-            // Draw key background
-            HBRUSH hBrush = CreateSolidBrush(RGB(0, 0, 0));
-            RECT rect = {x, y, x + keyWidth, y + keyHeight};
-            FillRect(hdc, &rect, hBrush);
-            DeleteObject(hBrush);
+            // TODO: remove repetitive portion
+            {
+                // Draw key background
+                HBRUSH hBrush = CreateSolidBrush(RGB(0, 0, 0));
+                RECT rect = {x, y, x + keyWidth, y + keyHeight};
+                FillRect(hdc, &rect, hBrush);
+                DeleteObject(hBrush);
+                
+                // Draw key outline
+                HPEN hPen = CreatePen(PS_SOLID, 1, RGB(100, 0, 0));
+                HPEN oldPen = (HPEN)SelectObject(hdc, hPen);
 
-            // Draw key character
-            SetTextColor(hdc, RGB(255, 255, 255));
-            SetBkMode(hdc, TRANSPARENT);
-            SelectObject(hdc, layoutFont);
-            int stringX = x + keyWidth / 2 - FONT_SIZE / 3;
-            int stringY = y + keyHeight / 2 + FONT_SIZE / 3;
-            wchar_t wch = static_cast<wchar_t>(key);
-            TextOutW(hdc, stringX, stringY, &wch, 1);
+                // Select a null brush so Rectangle won't fill it again
+                HBRUSH oldBrush = (HBRUSH)SelectObject(hdc, GetStockObject(NULL_BRUSH));
+                Rectangle(hdc, x, y, x + keyWidth, y + keyHeight); // create border/outline
+                SelectObject(hdc, oldBrush);
+                SelectObject(hdc, oldPen);
+                DeleteObject(hPen);
+
+
+                // Draw key character
+                SetTextColor(hdc, RGB(255, 255, 255));
+                SetBkMode(hdc, TRANSPARENT);
+                SelectObject(hdc, layoutFont);
+                int stringX = x + keyWidth / 2 - FONT_SIZE / 3;
+                int stringY = y + keyHeight / 2 - FONT_SIZE / 3;
+                wchar_t wch = static_cast<wchar_t>(key);
+                TextOutW(hdc, stringX, stringY, &wch, 1);
+            }
 
             // Store key position
             keyboardPositions[key] = {x + keyWidth / 2, y + keyHeight / 2};
@@ -305,8 +336,8 @@ void Overlay::DrawCharacterGrid(HDC hdc, char c, int x, int y)
     SetTextColor(hdc, RGB(255, 255, 255));
     SetBkMode(hdc, RGB(0, 0, 0));
     SelectObject(hdc, gridFont);
-    int stringX = x + SQUARE_SIZE * 1.5 - 8;
-    int stringY = y + SQUARE_SIZE * 1.5 - 8;
+    int stringX = x + (SQUARE_SIZE/2) - 8;// 8 -> font offset
+    int stringY = y + (SQUARE_SIZE/2) - 8;
     wchar_t wch = static_cast<wchar_t>(c);
     TextOutW(hdc, stringX, stringY, &wch, 1);
 }

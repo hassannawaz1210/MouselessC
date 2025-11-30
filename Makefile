@@ -1,10 +1,8 @@
-# Makefile for Mouseless C++ project
-
 # Compiler
 CXX = g++
 
 # Compiler flags
-CXXFLAGS = -Wall -Wextra -std=c++17
+CXXFLAGS = -Wall -Wextra -std=c++17 -g -O0 -mwindows 
 
 # Libraries
 LIBS = -lgdi32 -luser32 -ldwmapi
@@ -16,7 +14,7 @@ SRCS = ./src/main.cpp ./src/Overlay.cpp
 HDRS = ./src/Overlay.h
 
 # Output executable
-TARGET = ./bin/Mouseless
+TARGET = ./bin/MouselessC
 
 # Build target
 all: $(TARGET)

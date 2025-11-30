@@ -16,7 +16,7 @@ public:
 
 private:
     static const std::vector<std::string> KEYBOARD_ROWS;
-    static const int SQUARE_SIZE;
+    static int SQUARE_SIZE;
     static const int FONT_SIZE;
     static const UINT TOGGLE_KEY;
     static const UINT TOGGLE_MODIFIER;
@@ -24,6 +24,9 @@ private:
     static POINT pendingClickPos;
     static const UINT CLICK_DELAY_THRESHOLD = 200; // 1 second in milliseconds
     static int clickCount; // Track number of clicks
+
+    static u_int SCREEN_WIDTH;
+    static u_int SCREEN_HEIGHT;
 
     // State variables
     static std::map<char, POINT> keyboardPositions;

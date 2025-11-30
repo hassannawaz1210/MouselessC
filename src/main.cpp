@@ -1,6 +1,5 @@
 #include "Overlay.h"
-#include <windows.h>   // Needed for WinMain signature
-#include <iostream>
+#include <windows.h>
 
 int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
