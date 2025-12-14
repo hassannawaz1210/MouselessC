@@ -54,29 +54,10 @@ bool Overlay::Initialize()
         return false;
     }
 
-    // Create transparent window
-    SCREEN_WIDTH = GetSystemMetrics(SM_CXSCREEN);
-    if (SCREEN_WIDTH <= 0)
-	{
-		std::cout << "Could not get the screen width\b" << std::endl;
-		return 1;
-	}
-    SCREEN_HEIGHT = GetSystemMetrics(SM_CYSCREEN);
-    if (SCREEN_HEIGHT <= 0)
-	{
-		std::cout << "Could not get the screen height\b" << std::endl;
-		return 1;
-	}
-
-    std::vector<int> divisors_x = find_divisors(SCREEN_WIDTH);
-    std::vector<int> divisors_y = find_divisors(SCREEN_HEIGHT);
-    if (divisors_x.empty() || divisors_y.empty())
+    if (!CalculateCellSize())
     {
         return 1;
     }
-    std::vector<int> common_divs = common_divisors(divisors_x, divisors_y);
-    sort(common_divs.begin(), common_divs.end());
-    SQUARE_SIZE =  common_divs.back();
 
     hwnd = CreateWindowExW(
         WS_EX_TOPMOST | WS_EX_LAYERED,
@@ -116,6 +97,33 @@ bool Overlay::Initialize()
     //Hide OVerlay
     
     return true;
+}
+
+bool Overlay::CalculateCellSize()
+{
+    SCREEN_WIDTH = GetSystemMetrics(SM_CXSCREEN);
+    if (SCREEN_WIDTH <= 0)
+	{
+		std::cout << "Could not get the screen width\b" << std::endl;
+		return 1;
+	}
+    SCREEN_HEIGHT = GetSystemMetrics(SM_CYSCREEN);
+    if (SCREEN_HEIGHT <= 0)
+	{
+		std::cout << "Could not get the screen height\b" << std::endl;
+		return 1;
+	}
+
+    std::vector<int> divisors_x = find_divisors(SCREEN_WIDTH);
+    std::vector<int> divisors_y = find_divisors(SCREEN_HEIGHT);
+    if (divisors_x.empty() || divisors_y.empty())
+    {
+        return false;
+    }
+    std::vector<int> common_divs = common_divisors(divisors_x, divisors_y);
+    sort(common_divs.begin(), common_divs.end());
+    SQUARE_SIZE =  common_divs.back();
+    return true; 
 }
 
 void Overlay::Shutdown()
@@ -224,6 +232,7 @@ LRESULT CALLBACK Overlay::KeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
 }
 void Overlay::Draw(HDC hdc)
 {
+    if (!CalculateCellSize()) return; 
     int cols = SCREEN_WIDTH / (SQUARE_SIZE);
     int rows = SCREEN_HEIGHT / (SQUARE_SIZE);
     for (int row = 0; row < rows; row++)

@@ -45,5 +45,6 @@ private:
     static void Draw(HDC hdc);
     static void DrawKeyboardLayout(HDC hdc, int centerX, int centerY);
     static void DrawCharacterGrid(HDC hdc, char c, int x, int y);
+    static bool CalculateCellSize();
 };
 
